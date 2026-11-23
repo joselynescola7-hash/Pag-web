@@ -1,0 +1,181 @@
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract BemEstilo {
+
+    address public administrador;
+
+    enum Estado {
+        Pendiente,
+        EnProduccion,
+        Entregado,
+        Cancelado
+    }
+
+    struct Producto {
+        uint256 id;
+        string nombre;
+        uint256 precioCentavos;
+        uint256 existencias;
+        bool activo;
+    }
+
+    struct Pedido {
+        uint256 id;
+        address cliente;
+        uint256 productoId;
+        uint256 cantidad;
+        uint256 totalCentavos;
+        Estado estado;
+        string detalleDiseno;
+    }
+
+    uint256 public totalProductos;
+    uint256 public totalPedidos;
+
+    mapping(uint256 => Producto) public productos;
+    mapping(uint256 => Pedido) private pedidos;
+
+    event ProductoRegistrado(uint256 id, string nombre);
+    event PedidoRegistrado(uint256 id, address cliente);
+    event EstadoActualizado(uint256 id, Estado estado);
+
+    modifier soloAdministrador() {
+        require(
+            msg.sender == administrador,
+            "Solo el administrador puede realizar esta accion"
+        );
+        _;
+    }
+
+    constructor() {
+        administrador = msg.sender;
+
+        registrarProductoInicial("Tazas personalizadas");
+        registrarProductoInicial("Camisetas personalizadas");
+        registrarProductoInicial("Gorras personalizadas");
+        registrarProductoInicial("Tomatodos");
+        registrarProductoInicial("Esferos personalizados");
+        registrarProductoInicial("Llaveros");
+        registrarProductoInicial("Mouse pads");
+        registrarProductoInicial("Cojines");
+        registrarProductoInicial("Rompecabezas");
+    }
+
+    function registrarProductoInicial(string memory nombre) private {
+        totalProductos++;
+
+        productos[totalProductos] = Producto({
+            id: totalProductos,
+            nombre: nombre,
+            precioCentavos: 0,
+            existencias: 0,
+            activo: true
+        });
+
+        emit ProductoRegistrado(totalProductos, nombre);
+    }
+
+    // Administrar productos y precios
+    function actualizarProducto(
+        uint256 id,
+        uint256 precioCentavos,
+        uint256 existencias,
+        bool activo
+    ) public soloAdministrador {
+
+        require(id > 0 && id <= totalProductos, "Producto no existe");
+
+        productos[id].precioCentavos = precioCentavos;
+        productos[id].existencias = existencias;
+        productos[id].activo = activo;
+    }
+
+    // Registrar un pedido de un cliente
+    function registrarPedido(
+        uint256 productoId,
+        uint256 cantidad,
+        string memory detalleDiseno
+    ) public {
+
+        require(
+            productoId > 0 && productoId <= totalProductos,
+            "Producto no existe"
+        );
+
+        Producto storage producto = productos[productoId];
+
+        require(producto.activo, "Producto no disponible");
+        require(producto.precioCentavos > 0, "Precio no configurado");
+        require(cantidad > 0, "Cantidad invalida");
+        require(
+            producto.existencias >= cantidad,
+            "Existencias insuficientes"
+        );
+        require(bytes(detalleDiseno).length <= 200, "Detalle demasiado largo");
+
+        totalPedidos++;
+
+        uint256 total = producto.precioCentavos * cantidad;
+
+        producto.existencias -= cantidad;
+
+        pedidos[totalPedidos] = Pedido({
+            id: totalPedidos,
+            cliente: msg.sender,
+            productoId: productoId,
+            cantidad: cantidad,
+            totalCentavos: total,
+            estado: Estado.Pendiente,
+            detalleDiseno: detalleDiseno
+        });
+
+        emit PedidoRegistrado(totalPedidos, msg.sender);
+    }
+
+    // Consultar un pedido
+    function consultarPedido(
+        uint256 id
+    ) public view returns (Pedido memory) {
+
+        require(id > 0 && id <= totalPedidos, "Pedido no existe");
+
+        return pedidos[id];
+    }
+
+    // Actualizar el estado del pedido
+    function actualizarEstado(
+        uint256 id,
+        Estado nuevoEstado
+    ) public soloAdministrador {
+
+        require(id > 0 && id <= totalPedidos, "Pedido no existe");
+
+        Pedido storage pedido = pedidos[id];
+
+        require(
+            pedido.estado == Estado.Pendiente ||
+            pedido.estado == Estado.EnProduccion,
+            "El pedido ya esta finalizado"
+        );
+
+        if (nuevoEstado == Estado.Cancelado) {
+            productos[pedido.productoId].existencias += pedido.cantidad;
+        }
+
+        pedido.estado = nuevoEstado;
+
+        emit EstadoActualizado(id, nuevoEstado);
+    }
+
+    // Consultar los productos
+    function consultarProducto(
+        uint256 id
+    ) public view returns (Producto memory) {
+
+        require(id > 0 && id <= totalProductos, "Producto no existe");
+
+        return productos[id];
+    }
+}
